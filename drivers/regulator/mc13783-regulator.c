@@ -392,6 +392,7 @@ static int __devexit mc13783_regulator_remove(struct platform_device *pdev)
 	for (i = 0; i < pdata->num_regulators; i++)
 		regulator_unregister(priv->regulators[i]);
 
+	kfree(priv);
 	return 0;
 }
 
