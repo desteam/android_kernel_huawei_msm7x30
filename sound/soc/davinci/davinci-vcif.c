@@ -245,7 +245,10 @@ static int davinci_vcif_probe(struct platform_device *pdev)
 
 static int davinci_vcif_remove(struct platform_device *pdev)
 {
+	struct davinci_vcif_dev *davinci_vcif_dev = dev_get_drvdata(&pdev->dev);
+
 	snd_soc_unregister_dai(&pdev->dev);
+	kfree(davinci_vcif_dev);
 
 	return 0;
 }
