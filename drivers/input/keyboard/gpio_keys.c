@@ -764,6 +764,7 @@ static int __devexit gpio_keys_remove(struct platform_device *pdev)
 		gpio_remove_key(&ddata->data[i]);
 
 	input_unregister_device(input);
+	kfree(ddata);
 
 	/*
 	 * If we had no platform_data, we allocated buttons dynamically, and
