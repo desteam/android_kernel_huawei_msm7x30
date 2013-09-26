@@ -100,19 +100,20 @@ enum {
 	MDP_Y_CBCR_H2V1,   /* Y and CrCb, pseduo planer w/ Cr is in MSB */
 	MDP_Y_CRCB_H1V2,
 	MDP_Y_CBCR_H1V2,
-	MDP_RGBA_8888,    /* ARGB 888 */
-	MDP_BGRA_8888,	  /* ABGR 888 */
-	MDP_RGBX_8888,	  /* RGBX 888 */
-	MDP_Y_CRCB_H2V2_TILE,  /* Y and CrCb, pseudo planer tile */
-	MDP_Y_CBCR_H2V2_TILE,  /* Y and CbCr, pseudo planer tile */
-	MDP_Y_CR_CB_H2V2,  /* Y, Cr and Cb, planar */
-	MDP_Y_CR_CB_GH2V2,  /* Y, Cr and Cb, planar aligned to Android YV12 */
-	MDP_Y_CB_CR_H2V2,  /* Y, Cb and Cr, planar */
-	MDP_Y_CRCB_H1V1,  /* Y and CrCb, pseduo planer w/ Cr is in MSB */
-	MDP_Y_CBCR_H1V1,  /* Y and CbCr, pseduo planer w/ Cb is in MSB */
-	MDP_YCRCB_H1V1,   /* YCrCb interleave */
-	MDP_YCBCR_H1V1,   /* YCbCr interleave */
-	MDP_BGR_565,      /* BGR 565 planer */
+	MDP_RGBA_8888,    
+	MDP_BGRA_8888,	  
+	MDP_RGBX_8888,	  
+	MDP_Y_CRCB_H2V2_TILE,  
+	MDP_Y_CBCR_H2V2_TILE,  
+	MDP_Y_CR_CB_H2V2,  
+	MDP_Y_CR_CB_GH2V2,  
+	MDP_Y_CB_CR_H2V2,  
+	MDP_Y_CRCB_H1V1,  
+	MDP_Y_CBCR_H1V1,  
+	MDP_YCRCB_H1V1,   
+	MDP_YCBCR_H1V1,   
+	MDP_BGR_565,      
+	MDP_BGR_888,      /* BGR 888 */
 	MDP_IMGTYPE_LIMIT,
 	MDP_RGB_BORDERFILL,	/* border fill pipe */
 	MDP_FB_FORMAT = MDP_IMGTYPE2_START,    /* framebuffer format */
