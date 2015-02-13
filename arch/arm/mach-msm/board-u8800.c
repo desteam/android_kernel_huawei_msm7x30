@@ -3839,49 +3839,6 @@ static int __init i2c_touch_init(void)
 device_initcall(i2c_touch_init);
 #endif /* CONFIG_INPUT_TOUCHSCREEN */
 
-static uint32_t hwid_gpio_table[] = {
-	/* CAMIF_ID */
-	GPIO_CFG(84, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-	/* LCD_ID0 */
-	GPIO_CFG(86, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-	/* TOUCH_ID0 */
-	GPIO_CFG(89, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-	/* LCD_ID1 */
-	GPIO_CFG(133, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-};
-
-static void hwid_init(void)
-{
-	int camif_id = 0;
-	int lcd_id0 = 0;
-	int touch_id0 = 0;
-	int lcd_id1 = 0;
-
-	/* Configure the GPIOs before accessing. */
-	config_gpio_table(hwid_gpio_table, ARRAY_SIZE(hwid_gpio_table));
-
-	gpio_request(84, "CAMIF_ID");
-	camif_id = gpio_get_value_cansleep(84);
-
-	gpio_request(86, "LCD_ID0");
-	lcd_id0 = gpio_get_value_cansleep(86);
-
-	gpio_request(89, "TOUCH_ID0");
-	touch_id0 = gpio_get_value_cansleep(89);
-
-	gpio_request(133, "LCD_ID1");
-	lcd_id1 = gpio_get_value_cansleep(133);
-
-	pr_info("HW ID:\n"
-		" CAMIF_ID=%d\n LCD_ID0=%d\n TOUCH_ID0=%d\n LCD_ID1=%d\n",
-		camif_id, lcd_id0, touch_id0, lcd_id1);
-
-	gpio_free(84);
-	gpio_free(86);
-	gpio_free(89);
-	gpio_free(133);
-}
-
 static void __init msm7x30_init(void)
 {
 	unsigned smem_size;
@@ -3952,8 +3909,6 @@ static void __init msm7x30_init(void)
 #endif
 
 	pm8058_gpios_init();
-
-	hwid_init();
 
 	boot_reason = *(unsigned int *)
 		(smem_get_entry(SMEM_POWER_ON_STATUS_INFO, &smem_size));
