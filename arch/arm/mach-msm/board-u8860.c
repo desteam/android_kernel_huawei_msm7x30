@@ -1740,16 +1740,20 @@ static int synaptics_gpio_setup(void *gpio_data, bool configure)
 			return retval;
 		}
 
-		retval = gpio_direction_output(TS_GPIO_RESET, 0);
+		retval = gpio_direction_output(TS_GPIO_RESET, 1);
 		if (retval) {
 			pr_err("%s: Failed to setup reset gpio %d. Code: %d.",
 				__func__, TS_GPIO_RESET, retval);
 			gpio_free(TS_GPIO_RESET);
 			return retval;
 		}
+		msleep(5);
+
+		gpio_set_value(TS_GPIO_RESET, 0);
 		msleep(10);
+
 		gpio_set_value(TS_GPIO_RESET, 1);
-		msleep(150);
+		msleep(50);
 
 		virtual_key_setup();
 	} else {
