@@ -107,7 +107,6 @@
 #ifdef CONFIG_ION_MSM
 static struct platform_device ion_dev;
 #define MSM_ION_MM_SIZE		0x3300000
-#define MSM_ION_AUDIO_EBI0_SIZE	0x600000
 #define MSM_ION_AUDIO_SIZE	0x200000
 #define MSM_ION_SF_SIZE		0x2000000
 #define MSM_ION_WB_SIZE		MSM_FB_OVERLAY0_WRITEBACK_SIZE
@@ -3493,9 +3492,7 @@ static void __init size_ion_devices(void)
 
 static void __init reserve_ion_memory(void)
 {
-#if defined(CONFIG_ION_MSM) && defined(CONFIG_MSM_MULTIMEDIA_USE_ION)
-	msm7x30_reserve_table[MEMTYPE_EBI0].size += MSM_ION_AUDIO_EBI0_SIZE;
-#endif
+	msm7x30_reserve_table[MEMTYPE_EBI0].size += 1;
 }
 
 static void __init msm7x30_calculate_reserve_sizes(void)
