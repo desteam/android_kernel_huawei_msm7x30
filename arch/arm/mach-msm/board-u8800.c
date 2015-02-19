@@ -79,7 +79,6 @@
 #include "pm.h"
 
 #include <linux/i2c/atmel_mxt_ts.h>
-#include <linux/rmi.h>
 #include <linux/input/aps-12d.h>
 #include <linux/input/lsm303dlh.h>
 #include <sound/tpa2028d1.h>
@@ -3697,99 +3696,6 @@ static struct i2c_board_info atmel_mxt_ts = {
 };
 #endif
 
-#ifdef CONFIG_RMI4_I2C
-static struct regulator_bulk_data synaptics_pwr_regs[] = {
-	/* VDD */
-	{ .supply = "ldo10", .min_uV = 2700000, .max_uV = 2700000 },
-	/* VIO */
-	{ .supply = "ldo20", .min_uV = 1800000, .max_uV = 1800000 },
-};
-
-static int synaptics_gpio_setup(void *gpio_data, bool configure)
-{
-	int retval = 0;
-
-	if (configure) {
-		retval = regulator_bulk_get(NULL,
-			ARRAY_SIZE(synaptics_pwr_regs), synaptics_pwr_regs);
-		if (retval) {
-			pr_err("%s: Failed to request regulators. Code: %d.",
-				__func__, retval);
-			return retval;
-		}
-
-		retval = regulator_bulk_set_voltage(
-			ARRAY_SIZE(synaptics_pwr_regs), synaptics_pwr_regs);
-		if (retval) {
-			pr_err("%s: Failed to set voltages. Code: %d.",
-				__func__, retval);
-			return retval;
-		}
-
-		retval = regulator_bulk_enable(
-			ARRAY_SIZE(synaptics_pwr_regs), synaptics_pwr_regs);
-		if (retval) {
-			pr_err("%s: Failed to enable regulators. Code: %d.",
-				__func__, retval);
-			return retval;
-		}
-
-		retval = gpio_request(TS_GPIO_RESET, "rmi4_reset");
-		if (retval) {
-			pr_err("%s: Failed to get reset gpio %d. Code: %d.",
-				__func__, TS_GPIO_RESET, retval);
-			return retval;
-		}
-
-		retval = gpio_direction_output(TS_GPIO_RESET, 1);
-		if (retval) {
-			pr_err("%s: Failed to setup reset gpio %d. Code: %d.",
-				__func__, TS_GPIO_RESET, retval);
-			gpio_free(TS_GPIO_RESET);
-			return retval;
-		}
-		msleep(5);
-
-		gpio_set_value(TS_GPIO_RESET, 0);
-		msleep(10);
-
-		gpio_set_value(TS_GPIO_RESET, 1);
-		msleep(50);
-	} else {
-		gpio_free(TS_GPIO_RESET);
-		regulator_bulk_disable(
-			ARRAY_SIZE(synaptics_pwr_regs), synaptics_pwr_regs);
-		regulator_bulk_free(
-			ARRAY_SIZE(synaptics_pwr_regs), synaptics_pwr_regs);
-	}
-
-	return retval;
-}
-static struct rmi_f11_sensor_data synaptics_f11_sensor_data = {
-	.axis_align = {
-		.delta_x_threshold = 4,
-		.delta_y_threshold = 4,
-		.button_height = 169,
-	},
-};
-
-static struct rmi_device_platform_data synaptics_platform_data = {
-	.sensor_name = "TM1564",
-	.attn_gpio = TS_GPIO_IRQ,
-	.attn_polarity = RMI_ATTN_ACTIVE_LOW,
-	.level_triggered = true,
-	.gpio_config = synaptics_gpio_setup,
-	.reset_delay_ms = 100,
-	.f11_sensor_data = &synaptics_f11_sensor_data,
-};
-
-static struct i2c_board_info synaptics_ts = {
-	I2C_BOARD_INFO("rmi_i2c", 0x70),
-	.platform_data = &synaptics_platform_data,
-	.irq = MSM_GPIO_TO_INT(TS_GPIO_IRQ),
-};
-#endif
-
 static int __init i2c_touch_init(void)
 {
 	int ret;
@@ -3808,9 +3714,6 @@ static int __init i2c_touch_init(void)
 #endif
 	} else {
 		pr_debug("%s: Found Synaptics TM-1564\n", __func__);
-#ifdef CONFIG_RMI4_I2C
-		i2c_new_device(touch_i2c_adapter, &synaptics_ts);
-#endif
 	}
 
 	i2c_put_adapter(touch_i2c_adapter);
