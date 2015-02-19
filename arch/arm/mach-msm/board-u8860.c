@@ -79,6 +79,7 @@
 #include "pm.h"
 
 #include <linux/akm8975.h>
+#include <linux/synaptics_i2c_rmi4_hw.h>
 #include <linux/i2c/apds993x.h>
 #include <linux/input/lis3dh.h>
 #include <linux/l3g4200d.h>
@@ -1587,7 +1588,7 @@ static ssize_t u8860_virtual_keys_register(struct kobject *kobj,
 
 static struct kobj_attribute synaptics_ts_virtual_keys_attr = {
 	.attr = {
-		.name = "virtualkeys.synaptics_rmi4",
+		.name = "virtualkeys.synaptics_i2c_rmi4",
 		.mode = S_IRUGO,
 	},
 	.show = &u8860_virtual_keys_register,
@@ -1688,6 +1689,94 @@ static struct tpa2028d1_platform_data tpa2028d1_pdata = {
 	},
 	.register_callbacks		= tpa2028d1_reg_cb,
 	.unregister_callbacks		= tpa2028d1_unreg_cb,
+};
+#endif
+
+#if CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_RMI4_HW
+#define TS_GPIO_IRQ	148
+#define TS_GPIO_RESET	85
+
+static struct regulator *synaptics_reg = NULL;
+
+static int synaptics_rmi4_power(bool enable)
+{
+	if (enable)
+		return regulator_enable(synaptics_reg);
+	else
+		return regulator_disable(synaptics_reg);
+}
+
+static int synaptics_rmi4_reset(void)
+{
+	int retval = gpio_request(TS_GPIO_RESET, "syn_reset_gpio");
+	if (retval) {
+		pr_err("%s: Failed to get reset gpio %d. Code: %d.",
+			__func__, TS_GPIO_RESET, retval);
+		return retval;
+	}
+
+	retval = gpio_direction_output(TS_GPIO_RESET, 1);
+	if (retval) {
+		pr_err("%s: Failed to setup reset gpio %d. Code: %d.",
+			__func__, TS_GPIO_RESET, retval);
+		gpio_free(TS_GPIO_RESET);
+		return retval;
+	}
+	msleep(5);
+
+	gpio_set_value(TS_GPIO_RESET, 0);
+	msleep(10);
+
+	gpio_set_value(TS_GPIO_RESET, 1);
+	msleep(50);
+
+	return 0;
+}
+
+static int synaptics_rmi4_init(void)
+{
+	int ret = 0;
+
+	if (synaptics_reg)
+		return 0;
+
+	synaptics_reg = regulator_get(NULL, "gp4");
+	if (IS_ERR(synaptics_reg)) {
+		ret = PTR_ERR(synaptics_reg);
+		pr_err("%s: Failed to request regulator. Code: %d.",
+			__func__, ret);
+		return ret;
+	}
+
+	ret = regulator_set_voltage(synaptics_reg, 2700000, 2700000);
+	if (ret) {
+		ret = PTR_ERR(synaptics_reg);
+		pr_err("%s: Failed to set regulator voltage. Code: %d.",
+			__func__, ret);
+		return ret;
+	}
+
+	return ret;
+}
+
+static void synaptics_rmi4_exit(void)
+{
+	if (synaptics_reg) {
+		regulator_put(synaptics_reg);
+		synaptics_reg = NULL;
+	}
+}
+
+static struct synaptics_i2c_rmi4_hw_platform_data synaptics_rmi4_pdata = {
+	.irq_gpio = TS_GPIO_IRQ,
+	.display_x = 480,
+	.display_y = 854,
+	.panel_x = 480,
+	.panel_y = 958,
+	.power = synaptics_rmi4_power,
+	.reset = synaptics_rmi4_reset,
+	.init = synaptics_rmi4_init,
+	.exit = synaptics_rmi4_exit,
 };
 #endif
 
@@ -1822,6 +1911,13 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 	{
 		I2C_BOARD_INFO("tpa2028d1", 0xB0 >> 1),
 		.platform_data = &tpa2028d1_pdata,
+	},
+	#endif
+	#if CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_RMI4_HW
+	{
+		I2C_BOARD_INFO("synaptics_i2c_rmi4", 0x70),
+		.platform_data = &synaptics_rmi4_pdata,
+		.irq = MSM_GPIO_TO_INT(TS_GPIO_IRQ),
 	},
 	#endif
 	#ifdef CONFIG_INPUT_L3G4200D
