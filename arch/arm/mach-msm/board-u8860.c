@@ -79,7 +79,6 @@
 #include "pm.h"
 
 #include <linux/akm8975.h>
-#include <linux/rmi.h>
 #include <linux/i2c/apds993x.h>
 #include <linux/input/lis3dh.h>
 #include <linux/l3g4200d.h>
@@ -1692,96 +1691,6 @@ static struct tpa2028d1_platform_data tpa2028d1_pdata = {
 };
 #endif
 
-#ifdef CONFIG_RMI4_I2C
-#define TS_GPIO_IRQ	148
-#define TS_GPIO_RESET	85
-
-static struct regulator_bulk_data synaptics_pwr_regs[] = {
-	/* VDD */
-	{ .supply = "ldo10", .min_uV = 2700000, .max_uV = 2700000 },
-	/* VIO */
-	{ .supply = "ldo20", .min_uV = 1800000, .max_uV = 1800000 },
-};
-
-static int synaptics_gpio_setup(void *gpio_data, bool configure)
-{
-	int retval = 0;
-
-	if (configure) {
-		retval = regulator_bulk_get(NULL,
-			ARRAY_SIZE(synaptics_pwr_regs), synaptics_pwr_regs);
-		if (retval) {
-			pr_err("%s: Failed to request regulators. Code: %d.",
-				__func__, retval);
-			return retval;
-		}
-
-		retval = regulator_bulk_set_voltage(
-			ARRAY_SIZE(synaptics_pwr_regs), synaptics_pwr_regs);
-		if (retval) {
-			pr_err("%s: Failed to set voltages. Code: %d.",
-				__func__, retval);
-			return retval;
-		}
-
-		retval = regulator_bulk_enable(
-			ARRAY_SIZE(synaptics_pwr_regs), synaptics_pwr_regs);
-		if (retval) {
-			pr_err("%s: Failed to enable regulators. Code: %d.",
-				__func__, retval);
-			return retval;
-		}
-
-		retval = gpio_request(TS_GPIO_RESET, "rmi4_reset");
-		if (retval) {
-			pr_err("%s: Failed to get reset gpio %d. Code: %d.",
-				__func__, TS_GPIO_RESET, retval);
-			return retval;
-		}
-
-		retval = gpio_direction_output(TS_GPIO_RESET, 1);
-		if (retval) {
-			pr_err("%s: Failed to setup reset gpio %d. Code: %d.",
-				__func__, TS_GPIO_RESET, retval);
-			gpio_free(TS_GPIO_RESET);
-			return retval;
-		}
-		msleep(5);
-
-		gpio_set_value(TS_GPIO_RESET, 0);
-		msleep(10);
-
-		gpio_set_value(TS_GPIO_RESET, 1);
-		msleep(50);
-
-		virtual_key_setup();
-	} else {
-		gpio_free(TS_GPIO_RESET);
-		regulator_bulk_disable(
-			ARRAY_SIZE(synaptics_pwr_regs), synaptics_pwr_regs);
-		regulator_bulk_free(
-			ARRAY_SIZE(synaptics_pwr_regs), synaptics_pwr_regs);
-	}
-
-	return retval;
-}
-static struct rmi_f11_sensor_data synaptics_f11_sensor_data = {
-	.axis_align = {
-		.button_height = 245,
-	},
-};
-
-static struct rmi_device_platform_data synaptics_platform_data = {
-	.sensor_name = "Synaptics",
-	.attn_gpio = TS_GPIO_IRQ,
-	.attn_polarity = RMI_ATTN_ACTIVE_LOW,
-	.level_triggered = true,
-	.gpio_config = synaptics_gpio_setup,
-	.reset_delay_ms = 100,
-	.f11_sensor_data = &synaptics_f11_sensor_data,
-};
-#endif
-
 #ifdef CONFIG_INPUT_L3G4200D
 static struct regulator *l3g4200d_reg = NULL;
 
@@ -1913,13 +1822,6 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 	{
 		I2C_BOARD_INFO("tpa2028d1", 0xB0 >> 1),
 		.platform_data = &tpa2028d1_pdata,
-	},
-	#endif
-	#ifdef CONFIG_RMI4_I2C
-	{
-		I2C_BOARD_INFO("rmi_i2c", 0x70),
-		.platform_data = &synaptics_platform_data,
-		.irq = MSM_GPIO_TO_INT(TS_GPIO_IRQ),
 	},
 	#endif
 	#ifdef CONFIG_INPUT_L3G4200D
@@ -3366,6 +3268,8 @@ static void __init msm7x30_init(void)
 #endif
 
 	pm8058_gpios_init();
+
+	virtual_key_setup();
 
 	boot_reason = *(unsigned int *)
 		(smem_get_entry(SMEM_POWER_ON_STATUS_INFO, &smem_size));
