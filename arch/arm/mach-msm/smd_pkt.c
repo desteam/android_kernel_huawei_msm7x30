@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -34,10 +34,10 @@
 #include <linux/wakelock.h>
 
 #include <mach/msm_smd.h>
-#include <mach/subsystem_restart.h>
+#include <mach/peripheral-loader.h>
 #include <mach/msm_ipc_logging.h>
-#include <mach/msm_smsm.h>
 
+#include "smd_private.h"
 #ifdef CONFIG_ARCH_FSM9XXX
 #define NUM_SMD_PKT_PORTS 4
 #else
@@ -101,6 +101,8 @@ enum {
 	SMD_PKT_STATUS = 1U << 0,
 	SMD_PKT_READ = 1U << 1,
 	SMD_PKT_WRITE = 1U << 2,
+	SMD_PKT_READ_DUMP_BUFFER = 1U << 3,
+	SMD_PKT_WRITE_DUMP_BUFFER = 1U << 4,
 	SMD_PKT_POLL = 1U << 5,
 };
 
@@ -112,6 +114,18 @@ enum {
 do { \
 	if (smd_pkt_ilctxt) \
 		ipc_log_string(smd_pkt_ilctxt, "<SMD_PKT>: "x); \
+} while (0)
+
+#define SMD_PKT_LOG_BUF(buf, cnt) \
+do { \
+	char log_buf[128]; \
+	int i; \
+	if (smd_pkt_ilctxt) { \
+		i = cnt < 16 ? cnt : 16; \
+		hex_dump_to_buffer(buf, i, 16, 1, log_buf, \
+				   sizeof(log_buf), false); \
+		ipc_log_string(smd_pkt_ilctxt, "<SMD_PKT>: %s", log_buf); \
+	} \
 } while (0)
 
 #define D_STATUS(x...) \
@@ -135,6 +149,24 @@ do { \
 	SMD_PKT_LOG_STRING(x); \
 } while (0)
 
+#define D_READ_DUMP_BUFFER(prestr, cnt, buf) \
+do { \
+	if (msm_smd_pkt_debug_mask & SMD_PKT_READ_DUMP_BUFFER) \
+		print_hex_dump(KERN_INFO, prestr, \
+			       DUMP_PREFIX_NONE, 16, 1, \
+			       buf, cnt, 1); \
+	SMD_PKT_LOG_BUF(buf, cnt); \
+} while (0)
+
+#define D_WRITE_DUMP_BUFFER(prestr, cnt, buf) \
+do { \
+	if (msm_smd_pkt_debug_mask & SMD_PKT_WRITE_DUMP_BUFFER) \
+		print_hex_dump(KERN_INFO, prestr, \
+			       DUMP_PREFIX_NONE, 16, 1, \
+			       buf, cnt, 1); \
+	SMD_PKT_LOG_BUF(buf, cnt); \
+} while (0)
+
 #define D_POLL(x...) \
 do { \
 	if (msm_smd_pkt_debug_mask & SMD_PKT_POLL) \
@@ -152,6 +184,8 @@ do { \
 #define D_STATUS(x...) do {} while (0)
 #define D_READ(x...) do {} while (0)
 #define D_WRITE(x...) do {} while (0)
+#define D_READ_DUMP_BUFFER(prestr, cnt, buf) do {} while (0)
+#define D_WRITE_DUMP_BUFFER(prestr, cnt, buf) do {} while (0)
 #define D_POLL(x...) do {} while (0)
 #define E_SMD_PKT_SSR(x) do {} while (0)
 #endif
@@ -398,6 +432,7 @@ wait_for_packet:
 			return notify_reset(smd_pkt_devp);
 		}
 	} while (pkt_size != bytes_read);
+	D_READ_DUMP_BUFFER("Read: ", (bytes_read > 16 ? 16 : bytes_read), buf);
 	mutex_unlock(&smd_pkt_devp->rx_lock);
 
 	mutex_lock(&smd_pkt_devp->ch_lock);
@@ -474,7 +509,7 @@ ssize_t smd_pkt_write(struct file *file,
 	do {
 		prepare_to_wait(&smd_pkt_devp->ch_write_wait_queue,
 				&write_wait, TASK_UNINTERRUPTIBLE);
-		if (!smd_write_segment_avail(smd_pkt_devp->ch) &&
+		if (!smd_write_avail(smd_pkt_devp->ch) &&
 		    !smd_pkt_devp->has_reset) {
 			smd_enable_read_intr(smd_pkt_devp->ch);
 			schedule();
@@ -505,6 +540,8 @@ ssize_t smd_pkt_write(struct file *file,
 	} while (bytes_written != count);
 	smd_write_end(smd_pkt_devp->ch);
 	mutex_unlock(&smd_pkt_devp->tx_lock);
+	D_WRITE_DUMP_BUFFER("Write: ",
+			    (bytes_written > 16 ? 16 : bytes_written), buf);
 	D_WRITE("Finished %s on smd_pkt_dev id:%d %d bytes\n",
 		__func__, smd_pkt_devp->i, count);
 
@@ -594,7 +631,7 @@ static void check_and_wakeup_writer(struct smd_pkt_dev *smd_pkt_devp)
 		return;
 	}
 
-	sz = smd_write_segment_avail(smd_pkt_devp->ch);
+	sz = smd_write_avail(smd_pkt_devp->ch);
 	if (sz) {
 		D_WRITE("%s: %d bytes write space in smd_pkt_dev id:%d\n",
 			__func__, sz, smd_pkt_devp->i);
@@ -608,9 +645,8 @@ static void ch_notify(void *priv, unsigned event)
 	struct smd_pkt_dev *smd_pkt_devp = priv;
 
 	if (smd_pkt_devp->ch == 0) {
-		if (event != SMD_EVENT_CLOSE)
-			pr_err("%s on a closed smd_pkt_dev id:%d\n",
-					__func__, smd_pkt_devp->i);
+		pr_err("%s on a closed smd_pkt_dev id:%d\n",
+			__func__, smd_pkt_devp->i);
 		return;
 	}
 
@@ -835,17 +871,12 @@ int smd_pkt_open(struct inode *inode, struct file *file)
 		peripheral = smd_edge_to_subsystem(
 				smd_ch_edge[smd_pkt_devp->i]);
 		if (peripheral) {
-			smd_pkt_devp->pil = subsystem_get(peripheral);
+			smd_pkt_devp->pil = pil_get(peripheral);
 			if (IS_ERR(smd_pkt_devp->pil)) {
 				r = PTR_ERR(smd_pkt_devp->pil);
-				pr_err("%s failed on smd_pkt_dev id:%d - subsystem_get failed for %s\n",
-					__func__, smd_pkt_devp->i, peripheral);
-				/*
-				 * Sleep inorder to reduce the frequency of
-				 * retry by user-space modules and to avoid
-				 * possible watchdog bite.
-				 */
-				msleep((smd_pkt_devp->open_modem_wait * 1000));
+				pr_err("%s failed on smd_pkt_dev id:%d -"
+				       " pil_get failed for %s\n", __func__,
+					smd_pkt_devp->i, peripheral);
 				goto release_pd;
 			}
 
@@ -925,7 +956,7 @@ int smd_pkt_open(struct inode *inode, struct file *file)
 	}
 release_pil:
 	if (peripheral && (r < 0))
-		subsystem_put(smd_pkt_devp->pil);
+		pil_put(smd_pkt_devp->pil);
 
 release_pd:
 	if (r < 0) {
@@ -969,7 +1000,7 @@ int smd_pkt_release(struct inode *inode, struct file *file)
 		platform_driver_unregister(&smd_pkt_devp->driver);
 		smd_pkt_devp->driver.probe = NULL;
 		if (smd_pkt_devp->pil)
-			subsystem_put(smd_pkt_devp->pil);
+			pil_put(smd_pkt_devp->pil);
 		smd_pkt_devp->has_reset = 0;
 		smd_pkt_devp->do_reset_notification = 0;
 		smd_pkt_devp->wakelock_locked = 0;
